@@ -12,6 +12,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
  * See the License for the specific language governing permissions and 
  * limitations under the License.
+ * 
+ * modification of the fork oai4j-client:
+ * 2019-09-10 ; Andreas Czerniak ; to support ssl/tls and redirects (301|302)
  */
 
 package se.kb.oai.ore;
@@ -19,8 +22,14 @@ package se.kb.oai.ore;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URL;
+import javax.net.ssl.HostnameVerifier;
+
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLSession;
 
 /**
  * An aggregated resource is a resource, that together with other resources, 
@@ -78,9 +87,50 @@ public class AggregatedResource extends AggregateBase {
 	 * @return a stream to the content
 	 * @throws IOException
 	 */
-	public InputStream getContent() throws IOException {
-		return id.toURL().openStream();
-	}
+	public InputStream getContent() throws IOException, URISyntaxException {
+            URL url;
+            String uri_schema;
+            HttpURLConnection con = null;
+            boolean redirect = true;
+            InputStream myIStream = null;
+
+            HostnameVerifier hostnameVerifier = new HostnameVerifier() {
+            @Override
+                public boolean verify(String hostname, SSLSession session) {
+                    return true;
+                }
+            };
+	
+            while (redirect) {
+                redirect = false;
+                uri_schema = id.getScheme();
+                url = id.toURL();
+                if (uri_schema.equals("https")) {
+                    HttpsURLConnection https = (HttpsURLConnection) url.openConnection();
+                    https.setHostnameVerifier(hostnameVerifier);
+                    con = https;
+                } else if (uri_schema.equals("http")) {
+                    con = (HttpURLConnection) url.openConnection();
+                }
+                int status = con.getResponseCode();
+                if (status != HttpURLConnection.HTTP_OK) {
+                    if (status == HttpURLConnection.HTTP_MOVED_TEMP
+                        || status == HttpURLConnection.HTTP_MOVED_PERM
+                        || status == HttpURLConnection.HTTP_SEE_OTHER) {
+                        redirect = true;
+                    }
+                }
+
+                if (redirect) {
+                    myIStream = (new AggregatedResource(new URI(con.getHeaderField("Location")))).getContent();
+//                    this(new URI(con.getHeaderField("Location")));
+                } else {
+                    myIStream = con.getInputStream();
+                }
+            }
+            return myIStream;
+//		return id.toURL().openConnection().getInputStream(); // id.toURL().openStream();
+        }
 	
 	/**
 	 * Get a <code>String</code> containing the content for this 
@@ -89,7 +139,7 @@ public class AggregatedResource extends AggregateBase {
 	 * @return a stream to the content
 	 * @throws IOException
 	 */
-	public String getContentAsString() throws IOException {
+	public String getContentAsString() throws IOException, URISyntaxException {
 		InputStream in = getContent();
 		ByteArrayOutputStream out = new ByteArrayOutputStream();
 		byte[] bytes = new byte[4 * 1024];

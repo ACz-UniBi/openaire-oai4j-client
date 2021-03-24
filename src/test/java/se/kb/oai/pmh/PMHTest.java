@@ -27,8 +27,9 @@ import org.junit.Test;
 public class PMHTest {
 
 	private QueryBuilder builder;
-	private String baseurl = "http://lauren.kb.se:8080/oaiprovider";
-	
+//	private String baseurl = "http://lauren.kb.se:8080/oaiprovider";
+	private String baseurl = "http://pub.uni-bielefeld.de/oai";
+        
 	@Before
 	public void clearCalculator() {
 		this.builder = new QueryBuilder(baseurl);
